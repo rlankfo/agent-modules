@@ -3,6 +3,11 @@ argument "otlp_grpc_endpoint" {
 	default  = "0.0.0.0:4317"
 }
 
+argument "sampling_decision_wait_time" {
+  optional = true
+  default = "15s"
+}
+
 argument "tempo_endpoint" { }
 
 argument "tempo_user" { }
@@ -24,6 +29,8 @@ otelcol.receiver.otlp "default" {
 
 otelcol.processor.tail_sampling "default" {
 	// https://grafana.com/docs/agent/latest/flow/reference/components/otelcol.processor.tail_sampling/
+  decision_wait = argument.sampling_decision_wait_time.value
+
 	policy {
 		name = "sample-successful-requests"
 		type = "and"

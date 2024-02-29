@@ -1,0 +1,126 @@
+argument "otlp_grpc_endpoint" {
+	optional = true
+	default  = "0.0.0.0:4317"
+}
+
+argument "tempo_endpoint" { }
+
+argument "tempo_user" { }
+
+argument "tempo_password" { }
+
+otelcol.receiver.otlp "default" {
+	// https://grafana.com/docs/agent/latest/flow/reference/components/otelcol.receiver.otlp/
+
+	// configures the default grpc endpoint "0.0.0.0:4317"
+	grpc {
+		endpoint = argument.otlp_grpc_endpoint.value
+	}
+
+	output {
+		traces = [otelcol.processor.tail_sampling.default.input]
+	}
+}
+
+otelcol.processor.tail_sampling "default" {
+	// https://grafana.com/docs/agent/latest/flow/reference/components/otelcol.processor.tail_sampling/
+	policy {
+		name = "sample-successful-requests"
+		type = "and"
+
+		and {
+			and_sub_policy {
+				name = "status-code-policy"
+				type = "status_code"
+
+				status_code {
+					status_codes = ["OK", "UNSET"]
+				}
+			}
+
+			and_sub_policy {
+				name = "probabilistic-policy"
+				type = "probabilistic"
+
+				probabilistic {
+					sampling_percentage = 10
+				}
+			}
+		}
+	}
+
+	policy {
+		name = "sample-failed-requests"
+		type = "and"
+
+		and {
+			and_sub_policy {
+				name = "status-code-policy"
+				type = "status_code"
+
+				status_code {
+					status_codes = ["ERROR"]
+				}
+			}
+
+			and_sub_policy {
+				name = "probabilistic-policy"
+				type = "probabilistic"
+
+				probabilistic {
+					sampling_percentage = 50
+				}
+			}
+		}
+	}
+
+	policy {
+		name = "sample-long-requests"
+		type = "and"
+
+		and {
+			and_sub_policy {
+				name = "latency"
+				type = "latency"
+
+				latency {
+					threshold_ms = 5000
+				}
+			}
+
+			and_sub_policy {
+				name = "probabilistic-policy"
+				type = "probabilistic"
+
+				probabilistic {
+					sampling_percentage = 50
+				}
+			}
+		}
+	}
+
+	output {
+		traces = [otelcol.processor.batch.default.input]
+	}
+}
+
+otelcol.processor.batch "default" {
+	// https://grafana.com/docs/agent/latest/flow/reference/components/otelcol.processor.batch/
+	output {
+		traces = [otelcol.exporter.otlp.grafana_cloud_tempo.input]
+	}
+}
+
+otelcol.exporter.otlp "grafana_cloud_tempo" {
+	// https://grafana.com/docs/agent/latest/flow/reference/components/otelcol.exporter.otlp/
+	client {
+		endpoint = argument.tempo_endpoint.value
+		auth     = otelcol.auth.basic.grafana_cloud_tempo.handler
+	}
+}
+
+otelcol.auth.basic "grafana_cloud_tempo" {
+	// https://grafana.com/docs/agent/latest/flow/reference/components/otelcol.auth.basic/
+	username = argument.tempo_user.value
+	password = argument.tempo_password.value
+}

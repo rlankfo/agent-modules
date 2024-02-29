@@ -1,0 +1,57 @@
+argument "otlp_http_endpoint" {
+	optional = true
+	default  = "0.0.0.0:4318"
+}
+
+argument "otlp_grpc_endpoint" {
+	optional = true
+	default  = "0.0.0.0:4317"
+}
+
+argument "service_endpoint" {
+	optional = false
+}
+
+otelcol.receiver.otlp "default" {
+	// https://grafana.com/docs/agent/latest/flow/reference/components/otelcol.receiver.otlp/
+
+	// configures the default grpc endpoint "0.0.0.0:4317"
+	grpc {
+		endpoint = argument.otlp_grpc_endpoint.value
+	}
+
+	// configures the default http/protobuf endpoint "0.0.0.0:4318"
+	http {
+		endpoint = argument.otlp_http_endpoint.value
+	}
+
+	output {
+		traces = [otelcol.processor.batch.default.input]
+	}
+}
+
+otelcol.processor.batch "default" {
+	// https://grafana.com/docs/agent/latest/flow/reference/components/otelcol.processor.batch/
+	output {
+		traces = [otelcol.exporter.loadbalancing.default.input]
+	}
+}
+
+otelcol.exporter.loadbalancing "default" {
+	// https://grafana.com/docs/agent/latest/flow/reference/components/otelcol.exporter.loadbalancing/
+	resolver {
+		kubernetes {
+			service = argument.service_endpoint.value
+		}
+	}
+
+	protocol {
+		otlp {
+			client {
+				tls {
+					insecure = true
+				}
+			}
+		}
+	}
+}
